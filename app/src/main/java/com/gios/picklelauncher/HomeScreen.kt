@@ -111,12 +111,12 @@ fun HomeScreen(state: LauncherState, showGrid: Boolean) {
                 Spacer(modifier = Modifier.weight(1f))
             }
 
-            // Physical layout: F1 top-left, F2 bottom-left, F3 top-right, F4 bottom-right
-            // On the actual KY-42C hardware, F2(bottom-left)=Apps, F3(top-right)=Wall
+            // Physical layout (confirmed via getevent on KY-42C):
+            // F1 top-left, F3 bottom-left, F2 top-right, F4 bottom-right
             SoftkeyBar6(
                 f1Label = if (state.editMode) "Clear" else "Edit",
-                f2Label = if (state.editMode) "Done" else "Apps",
-                f3Label = if (showGrid) "Wall" else "Menu",
+                f2Label = if (showGrid) "Apps" else "Menu",
+                f3Label = if (state.editMode) "Done" else "Wall",
                 f4Label = if (showGrid) "Back" else "Exit",
                 centerLabel = if (showGrid) "Open" else "Menu",
             )

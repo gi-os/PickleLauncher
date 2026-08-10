@@ -33,13 +33,13 @@ private val TextSecondary = Color(0xFFAAAAAA)
 /**
  * The softkey bar — 2 rows × 3 columns. The center column is one tall
  * Select button spanning both rows. The four corner cells are the
- * option buttons, matching the physical layout confirmed on the KY-42C
- * via KeyProbe (same as PickleSolitaire):
+ * option buttons, matching the physical layout confirmed via getevent
+ * on the actual KY-42C hardware:
  *
- *   F1     | SELECT | F3
- *   F2     | SELECT | F4
+ *   F1     | SELECT | F2
+ *   F3     | SELECT | F4
  *
- * F1 top-left, F2 bottom-left, F3 top-right, F4 bottom-right.
+ * F1 top-left, F3 bottom-left, F2 top-right, F4 bottom-right.
  */
 @Composable
 fun SoftkeyBar6(
@@ -55,13 +55,13 @@ fun SoftkeyBar6(
             .height(80.dp)
             .background(SoftkeyBar),
     ) {
-        // Left column: F1 (top) and F2 (bottom).
+        // Left column: F1 (top) and F3 (bottom).
         Column(
             modifier = Modifier.weight(1f).fillMaxHeight(),
         ) {
             SoftkeyCell(f1Label, Modifier.weight(1f).fillMaxWidth())
             SoftkeyDividerLine(horizontal = true)
-            SoftkeyCell(f2Label, Modifier.weight(1f).fillMaxWidth())
+            SoftkeyCell(f3Label, Modifier.weight(1f).fillMaxWidth())
         }
 
         SoftkeyDividerLine(horizontal = false)
@@ -87,11 +87,11 @@ fun SoftkeyBar6(
 
         SoftkeyDividerLine(horizontal = false)
 
-        // Right column: F3 (top) and F4 (bottom).
+        // Right column: F2 (top) and F4 (bottom).
         Column(
             modifier = Modifier.weight(1f).fillMaxHeight(),
         ) {
-            SoftkeyCell(f3Label, Modifier.weight(1f).fillMaxWidth())
+            SoftkeyCell(f2Label, Modifier.weight(1f).fillMaxWidth())
             SoftkeyDividerLine(horizontal = true)
             SoftkeyCell(f4Label, Modifier.weight(1f).fillMaxWidth())
         }
