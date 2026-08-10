@@ -163,17 +163,17 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // F2 (bottom-left): App drawer
+            // F2 (bottom-left): Wallpaper cycle
             KeyEvent.KEYCODE_F2 -> {
+                if (showGrid && !s.editMode) s.cycleWallpaperColor()
+                true
+            }
+
+            // F3 (top-right): App drawer
+            KeyEvent.KEYCODE_F3 -> {
                 if (!showGrid) { showGrid = true; true }
                 else if (s.editMode) { s.openPicker(s.focusIndex); true }
                 else { s.openDrawer(); true }
-            }
-
-            // F3 (top-right): Wallpaper cycle
-            KeyEvent.KEYCODE_F3 -> {
-                if (showGrid && !s.editMode) s.cycleWallpaperColor()
-                true
             }
 
             // F4 (bottom-right): Settings (shortcut), or Back

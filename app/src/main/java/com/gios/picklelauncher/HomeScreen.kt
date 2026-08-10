@@ -114,8 +114,8 @@ fun HomeScreen(state: LauncherState, showGrid: Boolean) {
             // Physical layout: F1 top-left, F2 bottom-left, F3 top-right, F4 bottom-right
             SoftkeyBar6(
                 f1Label = if (state.editMode) "Clear" else "Edit",
-                f2Label = if (state.editMode) "Done" else "Apps",
-                f3Label = if (showGrid) "Wall" else "Menu",
+                f2Label = if (state.editMode) "Done" else "Wall",
+                f3Label = if (showGrid) "Apps" else "Menu",
                 f4Label = if (showGrid) "Back" else "Exit",
                 centerLabel = if (showGrid) "Open" else "Menu",
             )
