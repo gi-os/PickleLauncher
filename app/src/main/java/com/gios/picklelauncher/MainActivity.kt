@@ -112,7 +112,8 @@ class MainActivity : ComponentActivity() {
             KeyEvent.KEYCODE_DPAD_UP -> { s.moveFocus(0, -1); true }
             KeyEvent.KEYCODE_DPAD_DOWN -> { s.moveFocus(0, 1); true }
 
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_F3 -> {
+            // Center / Enter: open focused app, or enter edit, or show grid
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                 when {
                     !showGrid -> { showGrid = true; true }
                     s.editMode -> { s.openPicker(s.focusIndex); true }
@@ -153,7 +154,7 @@ class MainActivity : ComponentActivity() {
                 if (showGrid) { s.openDrawer(); true } else { showGrid = true; s.openDrawer(); true }
             }
 
-            // F1: Edit (or Clear in edit mode)
+            // F1 (top-left): Edit mode toggle (or Clear slot in edit mode)
             KeyEvent.KEYCODE_F1 -> {
                 when {
                     !showGrid -> { showGrid = true; true }
@@ -162,18 +163,26 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // F2: toggle edit mode
+            // F2 (bottom-left): App drawer
             KeyEvent.KEYCODE_F2 -> {
-                if (showGrid) {
-                    if (s.editMode) s.exitEditMode() else s.enterEditMode()
-                }
+                if (!showGrid) { showGrid = true; true }
+                else if (s.editMode) { s.openPicker(s.focusIndex); true }
+                else { s.openDrawer(); true }
+            }
+
+            // F3 (top-right): Wallpaper cycle
+            KeyEvent.KEYCODE_F3 -> {
+                if (showGrid && !s.editMode) s.cycleWallpaperColor()
                 true
             }
 
-            // F4: open settings (shortcut)
+            // F4 (bottom-right): Settings (shortcut), or Back
             KeyEvent.KEYCODE_F4 -> {
-                s.openSettings()
-                true
+                when {
+                    s.editMode -> { s.exitEditMode(); true }
+                    showGrid -> { showGrid = false; true }
+                    else -> { s.openSettings(); true }
+                }
             }
 
             KeyEvent.KEYCODE_BACK -> {
