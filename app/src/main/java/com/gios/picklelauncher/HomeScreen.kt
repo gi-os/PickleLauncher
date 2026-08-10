@@ -34,7 +34,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -46,8 +45,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 private val FocusRing = Color(0xFFFFC107)
-private val SlotBg = Color(0x22FFFFFF)
-private val SlotEmpty = Color(0x11FFFFFF)
 private val TextPrimary = Color.White
 private val TextSecondary = Color(0xFFAAAAAA)
 private val EditRing = Color(0xFF4CAF50)
@@ -203,15 +200,13 @@ private fun AppCell(
     cellWidth: androidx.compose.ui.unit.Dp,
     cellHeight: androidx.compose.ui.unit.Dp,
 ) {
-    val bg = if (entry != null) SlotBg else SlotEmpty
-
+    // No background box — transparent so the wallpaper shows through.
+    // Only the focus ring appears when a cell is selected.
     Box(
         modifier = Modifier
             .width(cellWidth)
             .height(cellHeight)
-            .padding(3.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(bg)
+            .padding(4.dp)
             .then(
                 if (focused) Modifier.border(2.dp, ringColor, RoundedCornerShape(8.dp))
                 else Modifier
@@ -223,7 +218,7 @@ private fun AppCell(
             modifier = Modifier.padding(4.dp),
         ) {
             if (entry != null) {
-                // App icon.
+                // App icon — larger now, no background behind it.
                 var iconBitmap by remember(entry.packageName, entry.activityName) {
                     mutableStateOf<ImageBitmap?>(null)
                 }
@@ -237,7 +232,7 @@ private fun AppCell(
                     Image(
                         bitmap = iconBitmap!!,
                         contentDescription = entry.label,
-                        modifier = Modifier.size(40.dp),
+                        modifier = Modifier.size(56.dp),
                     )
                 }
                 Text(
@@ -259,6 +254,7 @@ private fun AppCell(
                 )
             }
 
+            // Number label — mirrors the physical key.
             Text(
                 text = label,
                 color = if (focused) ringColor else TextSecondary,

@@ -359,8 +359,32 @@ fun loadPhotoBitmap(context: Context, uriString: String): Bitmap? {
         var sampleSize = 1
         while (bounds.outWidth / sampleSize > 960) sampleSize *= 2
         val opts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
-        context.contentResolver.openInputStream(uri)?.use { input ->
+        val bitmap = context.contentResolver.openInputStream(uri)?.use { input ->
             BitmapFactory.decodeStream(input, null, opts)
+        } ?: return null
+
+        // Read EXIF orientation and rotate if needed.
+        val exif = androidx.exifinterface.media.ExifInterface(
+            context.contentResolver.openInputStream(uri)!!
+        )
+        val orientation = exif.getAttributeInt(
+            androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION,
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL
+        )
+        val matrix = android.graphics.Matrix()
+        when (orientation) {
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_TRANSPOSE -> { matrix.postRotate(90f); matrix.postScale(-1f, 1f) }
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_TRANSVERSE -> { matrix.postRotate(270f); matrix.postScale(-1f, 1f) }
+        }
+        if (orientation != androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL) {
+            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        } else {
+            bitmap
         }
     } catch (e: Exception) { null }
 }
