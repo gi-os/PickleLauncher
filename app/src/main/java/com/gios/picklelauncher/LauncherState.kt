@@ -38,7 +38,7 @@ fun keyCodeToSlot(keyCode: Int): Int = when (keyCode) {
     else -> -1
 }
 
-enum class ScreenMode { HOME, PICKER, DRAWER }
+enum class ScreenMode { HOME, PICKER, DRAWER, SETTINGS }
 
 private const val PREFS = "pickle_launcher"
 private const val KEY_SLOTS = "slots"
@@ -51,8 +51,15 @@ data class AppEntry(
     val activityName: String,
     val label: String,
 ) {
+    /** Special marker for the internal settings app. */
+    val isSettings: Boolean get() = packageName == SETTINGS_PKG
+
     fun flatten(): String = "$packageName$SEP$activityName$SEP$label"
     companion object {
+        const val SETTINGS_PKG = "__internal__settings"
+        const val SETTINGS_ACT = "Settings"
+        val SETTINGS_ENTRY = AppEntry(SETTINGS_PKG, SETTINGS_ACT, "Settings")
+
         fun unflatten(s: String): AppEntry? {
             val parts = s.split(SEP)
             if (parts.size < 3 || parts[0].isEmpty()) return null
@@ -67,6 +74,9 @@ class LauncherState(private val context: Context) {
         private set
 
     var currentPage: Int by mutableIntStateOf(0)
+
+    /** Direction of the last page change, for slide animation. +1 = forward, -1 = back. */
+    var pageSlideDir: Int by mutableIntStateOf(0)
 
     var focusIndex: Int by mutableIntStateOf(0)
 
@@ -120,17 +130,24 @@ class LauncherState(private val context: Context) {
         val pm = context.packageManager
         val main = Intent(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) }
         val results: List<ResolveInfo> = pm.queryIntentActivities(main, 0)
-        return results.map { ri ->
+        val apps = results.map { ri ->
             AppEntry(
                 packageName = ri.activityInfo.packageName,
                 activityName = ri.activityInfo.name,
                 label = ri.loadLabel(pm).toString(),
             )
-        }.sortedBy { it.label.lowercase() }
+        }.sortedBy { it.label.lowercase() }.toMutableList()
+        // Insert the internal Settings app at the top of the list.
+        apps.add(0, AppEntry.SETTINGS_ENTRY)
+        return apps
     }
 
     fun launchApp(slot: Int) {
         val pageSlot = getPageSlots()[slot] ?: return
+        if (pageSlot.isSettings) {
+            openSettings()
+            return
+        }
         runCatching {
             val intent = Intent().apply {
                 setClassName(pageSlot.packageName, pageSlot.activityName)
@@ -141,6 +158,10 @@ class LauncherState(private val context: Context) {
     }
 
     fun launchAppDirect(entry: AppEntry) {
+        if (entry.isSettings) {
+            openSettings()
+            return
+        }
         runCatching {
             val intent = Intent().apply {
                 setClassName(entry.packageName, entry.activityName)
@@ -172,6 +193,7 @@ class LauncherState(private val context: Context) {
                 slots = newSlots
             }
             currentPage++
+            pageSlideDir = 1
             focusIndex = 0
         }
     }
@@ -179,6 +201,7 @@ class LauncherState(private val context: Context) {
     fun prevPage() {
         if (currentPage > 0) {
             currentPage--
+            pageSlideDir = -1
             focusIndex = 0
         }
     }
@@ -209,6 +232,14 @@ class LauncherState(private val context: Context) {
     }
 
     fun closeDrawer() {
+        screenMode = ScreenMode.HOME
+    }
+
+    fun openSettings() {
+        screenMode = ScreenMode.SETTINGS
+    }
+
+    fun closeSettings() {
         screenMode = ScreenMode.HOME
     }
 

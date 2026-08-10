@@ -135,51 +135,13 @@ fun AppListScreen(
             }
         }
 
-        // 5-button softkey bar.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(60.dp)
-                .background(SoftkeyBar),
-        ) {
-            Box(
-                modifier = Modifier.weight(1f).fillMaxHeight(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    if (isDrawer) "Back" else "Clear",
-                    color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Color(0x33FFFFFF)))
-            Box(
-                modifier = Modifier.weight(1f).fillMaxHeight(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("Up", color = TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            }
-            Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Color(0x33FFFFFF)))
-            Box(
-                modifier = Modifier.weight(1.2f).fillMaxHeight().background(SoftkeySelectBg),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("Select", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            }
-            Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Color(0x33FFFFFF)))
-            Box(
-                modifier = Modifier.weight(1f).fillMaxHeight(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("Down", color = TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            }
-            Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Color(0x33FFFFFF)))
-            Box(
-                modifier = Modifier.weight(1f).fillMaxHeight(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("Back", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            }
-        }
+        // Softkey bar — same 2×3 layout as home.
+        SoftkeyBar6(
+            f1Label = if (isDrawer) "Back" else "Clear",
+            f2Label = "",
+            f3Label = "",
+            f4Label = "Back",
+            centerLabel = "Select",
+        )
     }
 }

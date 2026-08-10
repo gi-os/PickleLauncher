@@ -4,6 +4,10 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -46,8 +50,6 @@ private val SlotBg = Color(0x22FFFFFF)
 private val SlotEmpty = Color(0x11FFFFFF)
 private val TextPrimary = Color.White
 private val TextSecondary = Color(0xFFAAAAAA)
-private val SoftkeyBar = Color(0xFF2A2A2A)
-private val SoftkeySelectBg = Color(0xFF444444)
 private val EditRing = Color(0xFF4CAF50)
 
 @Composable
@@ -83,7 +85,22 @@ fun HomeScreen(state: LauncherState, showGrid: Boolean) {
                         .weight(1f)
                         .padding(horizontal = 4.dp),
                 ) {
-                    AppGrid(state)
+                    // Animated page transition — slides left/right.
+                    AnimatedContent(
+                        targetState = state.currentPage,
+                        transitionSpec = {
+                            if (state.pageSlideDir >= 0) {
+                                // Forward: new page slides in from right, old slides out left.
+                                slideInHorizontally { it } togetherWith slideOutHorizontally { -it }
+                            } else {
+                                // Backward: new page slides in from left, old slides out right.
+                                slideInHorizontally { -it } togetherWith slideOutHorizontally { it }
+                            }
+                        },
+                        label = "page",
+                    ) {
+                        AppGrid(state)
+                    }
                 }
                 // Page indicator.
                 Text(
@@ -97,12 +114,13 @@ fun HomeScreen(state: LauncherState, showGrid: Boolean) {
                 Spacer(modifier = Modifier.weight(1f))
             }
 
-            SoftkeyBar5(
+            // 2-row × 3-col softkey bar with tall center Select.
+            SoftkeyBar6(
                 f1Label = if (state.editMode) "Clear" else "Edit",
-                f2Label = if (state.editMode) "Done" else "Menu",
-                centerLabel = if (showGrid) "Open" else "Menu",
-                f3Label = "Wall",
+                f2Label = if (state.editMode) "Done" else "Apps",
+                f3Label = if (state.editMode) "Done" else "Wall",
                 f4Label = if (showGrid) "Back" else "Exit",
+                centerLabel = if (showGrid) "Open" else "Menu",
             )
         }
     }
@@ -185,7 +203,6 @@ private fun AppCell(
     cellWidth: androidx.compose.ui.unit.Dp,
     cellHeight: androidx.compose.ui.unit.Dp,
 ) {
-    // No background behind the icon — transparent, so the wallpaper shows through.
     val bg = if (entry != null) SlotBg else SlotEmpty
 
     Box(
@@ -206,13 +223,12 @@ private fun AppCell(
             modifier = Modifier.padding(4.dp),
         ) {
             if (entry != null) {
-                // App icon — loaded from the system, rendered as ImageBitmap.
-                // No background behind it, just the raw icon on the wallpaper.
+                // App icon.
                 var iconBitmap by remember(entry.packageName, entry.activityName) {
                     mutableStateOf<ImageBitmap?>(null)
                 }
                 LaunchedEffect(entry.packageName, entry.activityName) {
-                    val drawable = state_getAppIcon(context, entry.packageName, entry.activityName)
+                    val drawable = loadAppIcon(context, entry.packageName, entry.activityName)
                     if (drawable != null) {
                         iconBitmap = drawableToImageBitmap(drawable)
                     }
@@ -224,7 +240,6 @@ private fun AppCell(
                         modifier = Modifier.size(40.dp),
                     )
                 }
-                // App name underneath.
                 Text(
                     text = entry.label,
                     color = TextPrimary,
@@ -244,7 +259,6 @@ private fun AppCell(
                 )
             }
 
-            // Number label — mirrors the physical key.
             Text(
                 text = label,
                 color = if (focused) ringColor else TextSecondary,
@@ -258,75 +272,15 @@ private fun AppCell(
     }
 }
 
-// Helper to call state.getAppIcon without passing state into AppCell.
-private fun state_getAppIcon(context: Context, pkg: String, act: String): Drawable? {
+private fun loadAppIcon(context: Context, pkg: String, act: String): Drawable? {
     return try {
         val pm = context.packageManager
-        val info = pm.getActivityInfo(android.content.ComponentName(pkg, act), 0)
-        info.loadIcon(pm)
+        if (pkg == AppEntry.SETTINGS_PKG) {
+            // Draw a simple gear-like icon for settings.
+            null // Falls back to text label, which is fine.
+        } else {
+            val info = pm.getActivityInfo(android.content.ComponentName(pkg, act), 0)
+            info.loadIcon(pm)
+        }
     } catch (e: Exception) { null }
-}
-
-/**
- * 5-button softkey bar matching the physical layout:
- * F1 (left) | F2 (left-center) | Center | F3 (right-center) | F4 (right)
- */
-@Composable
-private fun SoftkeyBar5(
-    f1Label: String,
-    f2Label: String,
-    centerLabel: String,
-    f3Label: String,
-    f4Label: String,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(60.dp)
-            .background(SoftkeyBar),
-    ) {
-        // F1
-        SoftkeySection(f1Label, Modifier.weight(1f), false)
-        SoftkeyDivider()
-        // F2
-        SoftkeySection(f2Label, Modifier.weight(1f), false)
-        SoftkeyDivider()
-        // Center
-        SoftkeySection(centerLabel, Modifier.weight(1.2f), true)
-        SoftkeyDivider()
-        // F3
-        SoftkeySection(f3Label, Modifier.weight(1f), false)
-        SoftkeyDivider()
-        // F4
-        SoftkeySection(f4Label, Modifier.weight(1f), false)
-    }
-}
-
-@Composable
-private fun SoftkeySection(label: String, modifier: Modifier, isCenter: Boolean) {
-    Box(
-        modifier = modifier
-            .fillMaxHeight()
-            .then(if (isCenter) Modifier.background(SoftkeySelectBg) else Modifier),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            color = TextPrimary,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
-private fun SoftkeyDivider() {
-    Box(
-        modifier = Modifier
-            .width(1.dp)
-            .fillMaxHeight()
-            .background(Color(0x33FFFFFF)),
-    )
 }
