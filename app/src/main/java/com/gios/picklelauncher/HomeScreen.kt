@@ -1,5 +1,10 @@
 package com.gios.picklelauncher
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.Drawable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -18,76 +23,88 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// Colors matching the Kyocera stock dark theme.
-private val BgDefault = Color(0xFF1A1A2E)
-private val FocusRing = Color(0xFFFFC107) // amber, same as PickleSolitaire focus
-private val SlotBg = Color(0x22FFFFFF) // semi-transparent white for occupied slots
-private val SlotEmpty = Color(0x11FFFFFF) // barely visible for empty slots
+private val FocusRing = Color(0xFFFFC107)
+private val SlotBg = Color(0x22FFFFFF)
+private val SlotEmpty = Color(0x11FFFFFF)
 private val TextPrimary = Color.White
 private val TextSecondary = Color(0xFFAAAAAA)
 private val SoftkeyBar = Color(0xFF2A2A2A)
 private val SoftkeySelectBg = Color(0xFF444444)
-private val EditRing = Color(0xFF4CAF50) // green in edit mode
+private val EditRing = Color(0xFF4CAF50)
 
-/**
- * The home screen. Two modes:
- * - Normal: clock at top, 4×3 app grid, softkey bar at bottom. Pressing a
- *   number key launches the app in that slot.
- * - Edit: same grid but each slot shows a green ring; pressing a slot opens
- *   the app picker to assign a new app to it.
- *
- * The clock-only screen before entering the grid is the Kyocera standby
- * screen — time/date at top, status bar, notification area. Pressing Menu
- * (z key / center) enters the grid; pressing Back returns to the clock.
- * We implement this as a simple mode toggle so the clock is always visible
- * above the grid.
- */
 @Composable
-fun HomeScreen(
-    state: LauncherState,
-    showGrid: Boolean,
-) {
+fun HomeScreen(state: LauncherState, showGrid: Boolean) {
     val bgColor = Color(state.currentWallpaperColor())
+    val ctx = LocalContext.current
+    val photoBitmap = remember(state.wallpaperPhotoUri) {
+        if (state.wallpaperPhotoUri != null)
+            loadPhotoBitmap(ctx, state.wallpaperPhotoUri!!)?.asImageBitmap()
+        else null
+    }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(bgColor),
-    ) {
-        // Clock / standby area at the top — always visible.
-        ClockArea(state)
-
-        if (showGrid) {
-            // The 4×3 app grid fills the remaining space.
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .padding(horizontal = 4.dp),
-            ) {
-                AppGrid(state)
-            }
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Photo wallpaper background, if set.
+        if (photoBitmap != null) {
+            Image(
+                bitmap = photoBitmap,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            )
         } else {
-            // Just the clock — fill the rest with empty space.
-            Spacer(modifier = Modifier.weight(1f))
+            Box(modifier = Modifier.fillMaxSize().background(bgColor))
         }
 
-        // Softkey bar at the bottom — matches PickleSolitaire's layout pattern.
-        SoftkeyBar(
-            leftLabel = if (state.editMode) "Clear" else "Menu",
-            centerLabel = if (showGrid) "Open" else "Menu",
-            rightLabel = if (state.editMode) "Done" else "Back",
-        )
+        Column(modifier = Modifier.fillMaxSize()) {
+            ClockArea(state)
+
+            if (showGrid) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(horizontal = 4.dp),
+                ) {
+                    AppGrid(state)
+                }
+                // Page indicator.
+                Text(
+                    text = "Page ${state.currentPage + 1}/${state.pageCount}",
+                    color = TextSecondary,
+                    fontSize = 10.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
+                )
+            } else {
+                Spacer(modifier = Modifier.weight(1f))
+            }
+
+            SoftkeyBar5(
+                f1Label = if (state.editMode) "Clear" else "Edit",
+                f2Label = if (state.editMode) "Done" else "Menu",
+                centerLabel = if (showGrid) "Open" else "Menu",
+                f3Label = "Wall",
+                f4Label = if (showGrid) "Back" else "Exit",
+            )
+        }
     }
 }
 
@@ -96,23 +113,21 @@ private fun ClockArea(state: LauncherState) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 12.dp, start = 12.dp, end = 12.dp, bottom = 8.dp),
+            .padding(top = 16.dp, start = 12.dp, end = 12.dp, bottom = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Time — large, centered, the focal point of the standby screen.
         Text(
             text = state.timeText,
             color = TextPrimary,
-            fontSize = 42.sp,
+            fontSize = 64.sp,
             fontWeight = FontWeight.Light,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )
-        // Date underneath, smaller and muted.
         Text(
             text = state.dateText,
             color = TextSecondary,
-            fontSize = 14.sp,
+            fontSize = 16.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -121,9 +136,11 @@ private fun ClockArea(state: LauncherState) {
 
 @Composable
 private fun AppGrid(state: LauncherState) {
-    BoxWithConstraints(
-        modifier = Modifier.fillMaxSize(),
-    ) {
+    val context = LocalContext.current
+    val pageSlots = state.getPageSlots()
+    val ringColor = if (state.editMode) EditRing else FocusRing
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val cellWidth = maxWidth / GRID_COLS
         val cellHeight = maxHeight / GRID_ROWS
 
@@ -138,11 +155,15 @@ private fun AppGrid(state: LauncherState) {
                 ) {
                     for (col in 0 until GRID_COLS) {
                         val slot = row * GRID_COLS + col
+                        val entry = pageSlots[slot]
+                        val focused = state.focusIndex == slot
                         AppCell(
-                            entry = state.slots[slot],
+                            context = context,
+                            entry = entry,
                             label = SLOT_LABELS[slot],
-                            focused = state.focusIndex == slot,
+                            focused = focused,
                             editMode = state.editMode,
+                            ringColor = ringColor,
                             cellWidth = cellWidth,
                             cellHeight = cellHeight,
                         )
@@ -155,14 +176,16 @@ private fun AppGrid(state: LauncherState) {
 
 @Composable
 private fun AppCell(
+    context: Context,
     entry: AppEntry?,
     label: String,
     focused: Boolean,
     editMode: Boolean,
+    ringColor: Color,
     cellWidth: androidx.compose.ui.unit.Dp,
     cellHeight: androidx.compose.ui.unit.Dp,
 ) {
-    val ringColor = if (editMode) EditRing else FocusRing
+    // No background behind the icon — transparent, so the wallpaper shows through.
     val bg = if (entry != null) SlotBg else SlotEmpty
 
     Box(
@@ -183,29 +206,45 @@ private fun AppCell(
             modifier = Modifier.padding(4.dp),
         ) {
             if (entry != null) {
-                // App name, centered, truncated.
+                // App icon — loaded from the system, rendered as ImageBitmap.
+                // No background behind it, just the raw icon on the wallpaper.
+                var iconBitmap by remember(entry.packageName, entry.activityName) {
+                    mutableStateOf<ImageBitmap?>(null)
+                }
+                LaunchedEffect(entry.packageName, entry.activityName) {
+                    val drawable = state_getAppIcon(context, entry.packageName, entry.activityName)
+                    if (drawable != null) {
+                        iconBitmap = drawableToImageBitmap(drawable)
+                    }
+                }
+                if (iconBitmap != null) {
+                    Image(
+                        bitmap = iconBitmap!!,
+                        contentDescription = entry.label,
+                        modifier = Modifier.size(40.dp),
+                    )
+                }
+                // App name underneath.
                 Text(
                     text = entry.label,
                     color = TextPrimary,
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
                 )
             } else if (editMode) {
-                // Empty slot in edit mode shows a "+" hint.
                 Text(
                     text = "+",
                     color = TextSecondary,
-                    fontSize = 20.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                 )
             }
 
-            // Number label at the bottom-left corner of the cell — mirrors
-            // the physical key that launches it, exactly like the stock grid.
+            // Number label — mirrors the physical key.
             Text(
                 text = label,
                 color = if (focused) ringColor else TextSecondary,
@@ -219,18 +258,26 @@ private fun AppCell(
     }
 }
 
+// Helper to call state.getAppIcon without passing state into AppCell.
+private fun state_getAppIcon(context: Context, pkg: String, act: String): Drawable? {
+    return try {
+        val pm = context.packageManager
+        val info = pm.getActivityInfo(android.content.ComponentName(pkg, act), 0)
+        info.loadIcon(pm)
+    } catch (e: Exception) { null }
+}
+
 /**
- * The bottom softkey bar. Same Row-of-3 layout as PickleSolitaire to avoid
- * the overlap issue with absolutely-positioned corners on the narrow bar.
- *
- * F1 = left, F2 = right-top, F3 = right-bottom, F4 = bottom-right on this
- * device. We use left/center/right as a simple 3-section bar.
+ * 5-button softkey bar matching the physical layout:
+ * F1 (left) | F2 (left-center) | Center | F3 (right-center) | F4 (right)
  */
 @Composable
-private fun SoftkeyBar(
-    leftLabel: String,
+private fun SoftkeyBar5(
+    f1Label: String,
+    f2Label: String,
     centerLabel: String,
-    rightLabel: String,
+    f3Label: String,
+    f4Label: String,
 ) {
     Row(
         modifier = Modifier
@@ -238,56 +285,48 @@ private fun SoftkeyBar(
             .height(60.dp)
             .background(SoftkeyBar),
     ) {
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight(),
-            contentAlignment = Alignment.Center,
-        ) {
-            SoftkeyLabel(leftLabel)
-        }
-
-        Box(
-            modifier = Modifier
-                .width(1.dp)
-                .fillMaxHeight()
-                .background(Color(0x33FFFFFF)),
-        )
-
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .background(SoftkeySelectBg),
-            contentAlignment = Alignment.Center,
-        ) {
-            SoftkeyLabel(centerLabel)
-        }
-
-        Box(
-            modifier = Modifier
-                .width(1.dp)
-                .fillMaxHeight()
-                .background(Color(0x33FFFFFF)),
-        )
-
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight(),
-            contentAlignment = Alignment.Center,
-        ) {
-            SoftkeyLabel(rightLabel)
-        }
+        // F1
+        SoftkeySection(f1Label, Modifier.weight(1f), false)
+        SoftkeyDivider()
+        // F2
+        SoftkeySection(f2Label, Modifier.weight(1f), false)
+        SoftkeyDivider()
+        // Center
+        SoftkeySection(centerLabel, Modifier.weight(1.2f), true)
+        SoftkeyDivider()
+        // F3
+        SoftkeySection(f3Label, Modifier.weight(1f), false)
+        SoftkeyDivider()
+        // F4
+        SoftkeySection(f4Label, Modifier.weight(1f), false)
     }
 }
 
 @Composable
-private fun SoftkeyLabel(label: String) {
-    Text(
-        text = label,
-        color = TextPrimary,
-        fontSize = 14.sp,
-        fontWeight = FontWeight.Bold,
+private fun SoftkeySection(label: String, modifier: Modifier, isCenter: Boolean) {
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .then(if (isCenter) Modifier.background(SoftkeySelectBg) else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = TextPrimary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun SoftkeyDivider() {
+    Box(
+        modifier = Modifier
+            .width(1.dp)
+            .fillMaxHeight()
+            .background(Color(0x33FFFFFF)),
     )
 }

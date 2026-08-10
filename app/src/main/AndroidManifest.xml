@@ -1,25 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- No touchscreen required — this is a D-pad + keypad device. -->
     <uses-feature
         android:name="android.hardware.touchscreen"
         android:required="false" />
 
-    <!--
-      QUERY_ALL_PACKAGES: needed to enumerate installed apps for the launcher grid.
-      On Android 10 this is the only way to get the full app list — the
-      &lt;queries&gt; manifest tag (API 30+) doesn't apply here.
-    -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
-        tools:ignore="QueryAllPackagesPermission"
-        xmlns:tools="http://schemas.android.com/tools" />
+        tools:ignore="QueryAllPackagesPermission" />
 
-    <!--
-      SET_WALLPAPER: for the customizable background. The stock launcher lets
-      you pick a wallpaper from the gallery; we do the same via WallpaperManager.
-    -->
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
+
+    <!-- For reading a photo to use as wallpaper. On API 29, READ_EXTERNAL_STORAGE
+         is the permission; READ_MEDIA_IMAGES is the API 33+ equivalent. -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
 
     <application
         android:allowBackup="true"
@@ -27,12 +23,6 @@
         android:theme="@style/Theme.PickleLauncher"
         android:supportsRtl="true">
 
-        <!--
-          The home activity. CATEGORY_HOME + CATEGORY_DEFAULT makes Android
-          offer this as a launcher replacement when the user presses Home.
-          launchMode=singleTask so there's only ever one instance — pressing
-          Home while already in the launcher just brings it to front.
-        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

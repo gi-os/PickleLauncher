@@ -1,47 +1,30 @@
 package com.gios.picklelauncher
 
+import android.content.ComponentName
 import android.content.Context
-import android.content.pm.PackageManager
+import android.content.Intent
 import android.content.pm.ResolveInfo
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.text.format.DateFormat
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import java.util.Calendar
 
-/**
- * 12 grid slots, matching the keypad: keys 1-9, then *, 0, # in Kyocera's
- * order. The number labels on screen mirror the physical key that launches
- * them — exactly like the stock "standby & menu" app grid.
- *
- *   Slot  0 → key 1     Slot  4 → key 5     Slot  8 → key *
- *   Slot  1 → key 2     Slot  5 → key 6     Slot  9 → key 0
- *   Slot  2 → key 3     Slot  6 → key 7     Slot 10 → key #
- *   Slot  3 → key 4     Slot  7 → key 8     Slot 11 → (unused on stock)
- *
- * Wait — the stock Kyocera grid is 4 rows × 3 columns, read left-to-right,
- * top-to-bottom. Keys 1-9 map to the first 9 cells (3×3), then *, 0, # for
- * the last row. So:
- *
- *   Row 1: 1  2  3
- *   Row 2: 4  5  6
- *   Row 3: 7  8  9
- *   Row 4: *  0  #
- */
-const val GRID_ROWS = 4
+const val GRID_ROWS = 3
 const val GRID_COLS = 3
-const val NUM_SLOTS = GRID_ROWS * GRID_COLS // 12
+const val SLOTS_PER_PAGE = GRID_ROWS * GRID_COLS // 9
+const val MAX_PAGES = 5
 
-/** The keypad label for each slot index (matches the physical key). */
-val SLOT_LABELS = arrayOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#")
+val SLOT_LABELS = arrayOf("1", "2", "3", "4", "5", "6", "7", "8", "9")
 
-/**
- * Maps an Android keycode (KEYCODE_1..KEYCODE_9, KEYCODE_0, KEYCODE_STAR,
- * KEYCODE_POUND) to the slot index it should activate. Returns -1 if the
- * key isn't a launcher shortcut.
- */
 fun keyCodeToSlot(keyCode: Int): Int = when (keyCode) {
     android.view.KeyEvent.KEYCODE_1 -> 0
     android.view.KeyEvent.KEYCODE_2 -> 1
@@ -52,15 +35,15 @@ fun keyCodeToSlot(keyCode: Int): Int = when (keyCode) {
     android.view.KeyEvent.KEYCODE_7 -> 6
     android.view.KeyEvent.KEYCODE_8 -> 7
     android.view.KeyEvent.KEYCODE_9 -> 8
-    android.view.KeyEvent.KEYCODE_STAR -> 9
-    android.view.KeyEvent.KEYCODE_0 -> 10
-    android.view.KeyEvent.KEYCODE_POUND -> 11
     else -> -1
 }
 
+enum class ScreenMode { HOME, PICKER, DRAWER }
+
 private const val PREFS = "pickle_launcher"
 private const val KEY_SLOTS = "slots"
-private const val KEY_WALLPAPER = "wallpaper_color"
+private const val KEY_WALLPAPER_COLOR = "wallpaper_color"
+private const val KEY_WALLPAPER_PHOTO = "wallpaper_photo"
 private const val SEP = "|"
 
 data class AppEntry(
@@ -72,7 +55,7 @@ data class AppEntry(
     companion object {
         fun unflatten(s: String): AppEntry? {
             val parts = s.split(SEP)
-            if (parts.size < 3) return null
+            if (parts.size < 3 || parts[0].isEmpty()) return null
             return AppEntry(parts[0], parts[1], parts.drop(2).joinToString(SEP))
         }
     }
@@ -80,52 +63,62 @@ data class AppEntry(
 
 class LauncherState(private val context: Context) {
 
-    /** The 12 grid slots. null = empty. */
-    var slots: Array<AppEntry?> by mutableStateOf(loadSlots())
+    var slots: List<AppEntry?> by mutableStateOf(loadSlots())
         private set
 
-    /** Which slot the D-pad cursor is on (0..11). -1 = no focus. */
+    var currentPage: Int by mutableIntStateOf(0)
+
     var focusIndex: Int by mutableIntStateOf(0)
 
-    /** True when in edit mode (long-press entered it, Back exits). */
+    var pickerFocusIndex: Int by mutableIntStateOf(0)
+
     var editMode: Boolean by mutableStateOf(false)
         private set
 
-    /** Which slot is currently being assigned ( picker is open for it). */
     var editingSlot: Int by mutableIntStateOf(-1)
         private set
 
-    /** The app picker is showing when this is >= 0. */
-    val pickerOpen: Boolean get() = editingSlot >= 0
+    var screenMode: ScreenMode by mutableStateOf(ScreenMode.HOME)
 
-    /** Current time string, updated by the activity. */
     var timeText: String by mutableStateOf(formatTime())
         private set
 
-    /** Current date string. */
     var dateText: String by mutableStateOf(formatDate())
         private set
 
-    /** Wallpaper color index (0 = default black, 1-N = preset colors). */
     var wallpaperColorIndex: Int by mutableIntStateOf(loadWallpaperColor())
         private set
 
-    /** Available wallpaper colors. */
+    var wallpaperPhotoUri: String? by mutableStateOf(loadWallpaperPhoto())
+        private set
+
     val wallpaperColors = listOf(
-        0xFF1A1A2E.toInt(), // midnight blue (default)
-        0xFF0B3D0B.toInt(), // forest green
-        0xFF1A1A1A.toInt(), // charcoal
-        0xFF1B1B3A.toInt(), // deep indigo
-        0xFF2D1B00.toInt(), // dark amber
-        0xFF1A0D2E.toInt(), // dark purple
+        0xFF1A1A2E.toInt(), 0xFF0B3D0B.toInt(), 0xFF1A1A1A.toInt(),
+        0xFF1B1B3A.toInt(), 0xFF2D1B00.toInt(), 0xFF1A0D2E.toInt(),
     )
 
-    /** Returns all launchable apps on the device, sorted by name. */
+    private val iconCache = mutableMapOf<String, Drawable>()
+
+    val pageCount: Int get() = ((slots.size + SLOTS_PER_PAGE - 1) / SLOTS_PER_PAGE).coerceAtLeast(1)
+
+    fun getPageSlots(): Array<AppEntry?> {
+        val start = currentPage * SLOTS_PER_PAGE
+        return Array(SLOTS_PER_PAGE) { i -> slots.getOrNull(start + i) }
+    }
+
+    fun getAppIcon(packageName: String, activityName: String): Drawable? {
+        val key = "$packageName/$activityName"
+        iconCache[key]?.let { return it }
+        return try {
+            val pm = context.packageManager
+            val info = pm.getActivityInfo(ComponentName(packageName, activityName), 0)
+            info.loadIcon(pm).also { iconCache[key] = it }
+        } catch (e: Exception) { null }
+    }
+
     fun getInstalledApps(): List<AppEntry> {
         val pm = context.packageManager
-        val main = android.content.Intent(android.content.Intent.ACTION_MAIN).apply {
-            addCategory(android.content.Intent.CATEGORY_LAUNCHER)
-        }
+        val main = Intent(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) }
         val results: List<ResolveInfo> = pm.queryIntentActivities(main, 0)
         return results.map { ri ->
             AppEntry(
@@ -136,59 +129,102 @@ class LauncherState(private val context: Context) {
         }.sortedBy { it.label.lowercase() }
     }
 
-    /** Launches the app in the given slot, if any. */
     fun launchApp(slot: Int) {
-        val entry = slots.getOrNull(slot) ?: return
+        val pageSlot = getPageSlots()[slot] ?: return
         runCatching {
-            val intent = android.content.Intent().apply {
-                setClassName(entry.packageName, entry.activityName)
-                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            val intent = Intent().apply {
+                setClassName(pageSlot.packageName, pageSlot.activityName)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
         }
     }
 
-    /** Sets the slot to the given app and saves. */
-    fun setSlot(slot: Int, entry: AppEntry?) {
-        val newSlots = slots.copyOf()
-        newSlots[slot] = entry
+    fun launchAppDirect(entry: AppEntry) {
+        runCatching {
+            val intent = Intent().apply {
+                setClassName(entry.packageName, entry.activityName)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        }
+    }
+
+    fun setSlot(slotInPage: Int, entry: AppEntry?) {
+        val index = currentPage * SLOTS_PER_PAGE + slotInPage
+        val newSlots = slots.toMutableList()
+        while (newSlots.size <= index) newSlots.add(null)
+        newSlots[index] = entry
         slots = newSlots
         saveSlots()
     }
 
-    /** Clears a slot (removes the app). */
-    fun clearSlot(slot: Int) {
-        setSlot(slot, null)
+    fun clearSlot(slotInPage: Int) {
+        setSlot(slotInPage, null)
     }
 
-    fun enterEditMode() {
-        editMode = true
+    fun nextPage() {
+        if (currentPage < MAX_PAGES - 1) {
+            val needed = (currentPage + 2) * SLOTS_PER_PAGE
+            if (slots.size < needed) {
+                val newSlots = slots.toMutableList()
+                while (newSlots.size < needed) newSlots.add(null)
+                slots = newSlots
+            }
+            currentPage++
+            focusIndex = 0
+        }
     }
 
-    fun exitEditMode() {
-        editMode = false
-        editingSlot = -1
+    fun prevPage() {
+        if (currentPage > 0) {
+            currentPage--
+            focusIndex = 0
+        }
     }
 
-    fun openPicker(slot: Int) {
-        editingSlot = slot
+    fun enterEditMode() { editMode = true }
+    fun exitEditMode() { editMode = false; editingSlot = -1 }
+
+    fun openPicker(slotInPage: Int) {
+        editingSlot = slotInPage
+        pickerFocusIndex = 0
+        screenMode = ScreenMode.PICKER
     }
 
     fun closePicker() {
         editingSlot = -1
+        screenMode = ScreenMode.HOME
     }
 
-    /** Called when the user selects an app in the picker. */
     fun assignApp(entry: AppEntry) {
-        if (editingSlot >= 0) {
-            setSlot(editingSlot, entry)
-        }
+        if (editingSlot >= 0) setSlot(editingSlot, entry)
         editingSlot = -1
+        screenMode = ScreenMode.HOME
     }
 
-    fun cycleWallpaper() {
+    fun openDrawer() {
+        pickerFocusIndex = 0
+        screenMode = ScreenMode.DRAWER
+    }
+
+    fun closeDrawer() {
+        screenMode = ScreenMode.HOME
+    }
+
+    fun cycleWallpaperColor() {
         wallpaperColorIndex = (wallpaperColorIndex + 1) % wallpaperColors.size
         saveWallpaperColor()
+    }
+
+    fun setWallpaperPhoto(uriString: String) {
+        wallpaperPhotoUri = uriString
+        saveWallpaperPhoto()
+    }
+
+    fun clearWallpaperPhoto() {
+        wallpaperPhotoUri = null
+        saveWallpaperPhoto()
     }
 
     fun currentWallpaperColor(): Int = wallpaperColors[wallpaperColorIndex]
@@ -206,15 +242,21 @@ class LauncherState(private val context: Context) {
         focusIndex = newRow * GRID_COLS + newCol
     }
 
+    fun movePickerFocus(dy: Int) {
+        pickerFocusIndex = (pickerFocusIndex + dy).coerceAtLeast(0)
+    }
+
+    fun setPickerFocus(value: Int) {
+        pickerFocusIndex = value
+    }
+
     // --- Persistence ---
 
-    private fun loadSlots(): Array<AppEntry?> {
+    private fun loadSlots(): List<AppEntry?> {
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_SLOTS, null) ?: return arrayOfNulls(NUM_SLOTS)
+            .getString(KEY_SLOTS, null) ?: return MutableList(SLOTS_PER_PAGE) { null }
         val parts = raw.split("\n")
-        return Array(NUM_SLOTS) { i ->
-            if (i < parts.size) AppEntry.unflatten(parts[i]) else null
-        }
+        return parts.map { AppEntry.unflatten(it) }
     }
 
     private fun saveSlots() {
@@ -225,11 +267,22 @@ class LauncherState(private val context: Context) {
 
     private fun loadWallpaperColor(): Int =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getInt(KEY_WALLPAPER, 0)
+            .getInt(KEY_WALLPAPER_COLOR, 0)
 
     private fun saveWallpaperColor() {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putInt(KEY_WALLPAPER, wallpaperColorIndex).apply()
+            .edit().putInt(KEY_WALLPAPER_COLOR, wallpaperColorIndex).apply()
+    }
+
+    private fun loadWallpaperPhoto(): String? =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_WALLPAPER_PHOTO, null)
+
+    private fun saveWallpaperPhoto() {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        if (wallpaperPhotoUri != null) prefs.putString(KEY_WALLPAPER_PHOTO, wallpaperPhotoUri)
+        else prefs.remove(KEY_WALLPAPER_PHOTO)
+        prefs.apply()
     }
 
     private fun formatTime(): String {
@@ -251,4 +304,32 @@ class LauncherState(private val context: Context) {
             "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
         return "${days[cal.get(Calendar.DAY_OF_WEEK) - 1]} ${months[cal.get(Calendar.MONTH)]} ${cal.get(Calendar.DAY_OF_MONTH)}"
     }
+}
+
+// --- Utility functions ---
+
+fun drawableToImageBitmap(drawable: Drawable): ImageBitmap {
+    val width = drawable.intrinsicWidth.coerceAtLeast(48)
+    val height = drawable.intrinsicHeight.coerceAtLeast(48)
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    drawable.setBounds(0, 0, width, height)
+    drawable.draw(canvas)
+    return bitmap.asImageBitmap()
+}
+
+fun loadPhotoBitmap(context: Context, uriString: String): Bitmap? {
+    return try {
+        val uri = Uri.parse(uriString)
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, bounds)
+        }
+        var sampleSize = 1
+        while (bounds.outWidth / sampleSize > 960) sampleSize *= 2
+        val opts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            BitmapFactory.decodeStream(input, null, opts)
+        }
+    } catch (e: Exception) { null }
 }
